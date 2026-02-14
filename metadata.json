@@ -1,0 +1,7 @@
+{
+  "name": "Raza Boiler Management System",
+  "description": "A world-class senior-engineered poultry and boiler distribution management system featuring procurement tracking, hotel order fulfillment, shop sales logic, and AI-driven business insights.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
