@@ -55,13 +55,28 @@ const VehicleMaster = () => {
   });
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
+  const normalizeDate = (value?: string) => {
+    if (!value) return '';
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // Get auth token from cookie
-  const getAuthHeaders = () => {
+  const getAuthHeaders = (options?: { json?: boolean }) => {
     const token = getCookie('auth_token');
-    return {
-      'Content-Type': 'application/json',
+    const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
     };
+    if (options?.json !== false) {
+      headers['Content-Type'] = 'application/json';
+    }
+    return headers;
   };
 
   // Fetch vehicles and types on component mount
@@ -90,44 +105,73 @@ const VehicleMaster = () => {
     }
   };
 
-  const fetchVehicles = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      const response = await fetch(`${API_BASE_URL}/vehicles`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
+const fetchVehicles = async () => {
+  try {
+    setLoading(true);
+    setError('');
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch vehicles');
-      }
+    // Fetch all vehicles
+    const response = await fetch(`${API_BASE_URL}/vehicles`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
 
-      const data = await response.json();
-
-      const mappedVehicles = (data.data || data).map((vehicle: any) => ({
-        id: vehicle.id || vehicle.vehicle_id || Math.random().toString(),
-        vehicleId: vehicle.vehicalid || vehicle.vehicleId || vehicle.vehicle_id || '',
-        vehicleNumber: vehicle.rcnumber || vehicle.vehicleNumber || vehicle.rc_number || '',
-        model: vehicle.vehicalmodel || vehicle.model || vehicle.vehicle_model || '',
-        type: vehicle.vehicletype || vehicle.type || 'Heavy',
-        ownerName: vehicle.ownername || vehicle.owner_name || '',
-        ownerAddress: vehicle.owneraddress || vehicle.owner_address || '',
-        dateOfJoining: vehicle.dateofjoining || vehicle.date_of_joining || '',
-        contactPersonName: vehicle.contactpersonname || vehicle.contact_person_name || '',
-        contactPersonNumber: vehicle.contactperson_number || vehicle.contact_person_number || '',
-        createdBy: vehicle.created_by || vehicle.createdBy || '',
-      }));
-
-      console.log('Fetched vehicles:', mappedVehicles);
-      setVehicles(mappedVehicles);
-    } catch (err) {
-      console.error('Error fetching vehicles:', err);
-      setError('Failed to load vehicles');
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error('Failed to fetch vehicles');
     }
-  };
+
+    const data = await response.json();
+    const vehicles = data.data || data;
+
+    // Map vehicles and fetch type names
+    const mappedVehicles = await Promise.all(
+      vehicles.map(async (vehicle: any) => {
+        // Determine the type ID (assuming 'type' is the ID here)
+        const typeId = vehicle.vehicletype || vehicle.type || '1'; // fallback to 1 if missing
+
+        // Fetch vehicle type name
+        let typeName = 'Unknown';
+        try {
+          const typeResponse = await fetch(`${API_BASE_URL}/vehicle-types/${typeId}`, {
+            method: 'GET',
+            headers: getAuthHeaders(),
+          });
+          console.log(`Fetching type for vehicle ${vehicle.id} with type ID ${typeId}:`, typeResponse);
+          if (typeResponse.ok) {
+            const typeData = await typeResponse.json();
+            typeName = typeData.vehicletype || 'Unknown';
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch type for vehicle ${vehicle.id}`, err);
+        }
+
+        return {
+          id: vehicle.id || vehicle.vehicle_id || Math.random().toString(),
+          vehicleId: vehicle.vehicalid || vehicle.vehicleId || vehicle.vehicle_id || '',
+          vehicleNumber: vehicle.rcnumber || vehicle.vehicleNumber || vehicle.rc_number || '',
+          model: vehicle.vehicalmodel || vehicle.model || vehicle.vehicle_model || '',
+          type: typeName, // use fetched type name
+          ownerName: vehicle.ownername || vehicle.owner_name || '',
+          ownerAddress: vehicle.owneraddress || vehicle.owner_address || '',
+          dateOfJoining: normalizeDate(vehicle.dateofjoining || vehicle.date_of_joining || ''),
+          contactPersonName: vehicle.contactpersonname || vehicle.contact_person_name || '',
+          contactPersonNumber: vehicle.contactperson_number || vehicle.contact_person_number || '',
+          createdBy: vehicle.created_by || vehicle.createdBy || '',
+        };
+      })
+    );
+
+    console.log('Fetched vehicles with type names:', mappedVehicles);
+    setVehicles(mappedVehicles);
+
+  } catch (err) {
+    console.error('Error fetching vehicles:', err);
+    setError('Failed to load vehicles');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,14 +184,16 @@ const VehicleMaster = () => {
     setError('');
 
     try {
+      const selectedType = vehicleTypes.find((vt) => vt.vehicletype === formData.type);
+      const vehicletypeValue = selectedType ? String(selectedType.id) : formData.type;
       const payload = {
-        vehicletype: formData.type,
+        vehicletype: vehicletypeValue,
         vehicalid: formData.vehicleId.toUpperCase(),
         rcnumber: formData.vehicleNumber.toUpperCase(),
         vehicalmodel: formData.model,
         ownername: formData.ownerName,
         owneraddress: formData.ownerAddress,
-        dateofjoining: formData.dateOfJoining,
+        dateofjoining: normalizeDate(formData.dateOfJoining),
         contactpersonname: formData.contactPersonName,
         contactperson_number: formData.contactPersonNumber,
         created_by: formData.createdBy,
@@ -170,10 +216,17 @@ const VehicleMaster = () => {
         await fetchVehicles();
       } else {
         // Create new vehicle
+        const body = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            body.append(key, String(value));
+          }
+        });
+
         const response = await fetch(`${API_BASE_URL}/vehicles/add`, {
           method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
+          headers: getAuthHeaders({ json: false }),
+          body,
         });
 
         if (!response.ok) {
@@ -224,7 +277,7 @@ const VehicleMaster = () => {
       type: vehicle.type,
       ownerName: vehicle.ownerName || '',
       ownerAddress: vehicle.ownerAddress || '',
-      dateOfJoining: vehicle.dateOfJoining || '',
+      dateOfJoining: normalizeDate(vehicle.dateOfJoining || ''),
       contactPersonName: vehicle.contactPersonName || '',
       contactPersonNumber: vehicle.contactPersonNumber || '',
       createdBy: vehicle.createdBy?.toString() || '1',
@@ -370,10 +423,12 @@ const VehicleMaster = () => {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-600">Date of Joining</label>
                 <input
-                  type="text"
+                  type="date"
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none"
                   value={formData.dateOfJoining}
-                  onChange={(e) => setFormData({ ...formData, dateOfJoining: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, dateOfJoining: normalizeDate(e.target.value) })
+                  }
                 />
               </div>
 
