@@ -54,7 +54,7 @@ const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => 
             onClick={() => onNavigate("items")}
             className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "items" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
           >
-            4. Item Master
+            4. Vehicle Item Master
           </button>
 
           <button
@@ -82,7 +82,14 @@ const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => 
             onClick={() => onNavigate("maintenance")}
             className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "maintenance" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
           >
-            8. Maintenance Master
+            9. Maintenance Master
+          </button>
+
+          <button
+            onClick={() => onNavigate("route-builder")}
+            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "route-builder" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+          >
+            10. Route Builder
           </button>
         </nav>
 

@@ -9,6 +9,7 @@ import SalesMaster from "./src/pages/SalesMaster";
 import PurchaseMaster from "./src/pages/PurchaseMaster";
 import VehicleMaster from "./src/pages/VehicleMaster";
 import MaintenanceMaster from "./src/pages/MaintenanceMaster";
+import RouteBuilder from "./src/pages/RouteBuilder";
 import { getCookie, removeCookie } from "./src/utils/cookieHelper";
 
 function App() {
@@ -48,6 +49,7 @@ function App() {
       {route === "purchase" && <PurchaseMaster />}
       {route === "vehicles" && <VehicleMaster />}
       {route === "maintenance" && <MaintenanceMaster />}
+      {route === "route-builder" && <RouteBuilder />}
     </MainLayout>
   );
 }
