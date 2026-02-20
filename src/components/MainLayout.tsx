@@ -54,7 +54,7 @@ const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => 
             onClick={() => onNavigate("items")}
             className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "items" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
           >
-            4. Vehicle Item Master
+            4. Item Master
           </button>
 
           <button
