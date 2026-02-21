@@ -72,10 +72,17 @@ const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => 
           </button>
 
           <button
+            onClick={() => onNavigate("orders")}
+            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "orders" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+          >
+            7. Order Master
+          </button>
+
+          <button
             onClick={() => onNavigate("vehicles")}
             className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "vehicles" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
           >
-            7. Vehicle Master
+            8. Vehicle Master
           </button>
 
           <button

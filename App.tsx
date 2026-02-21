@@ -7,6 +7,7 @@ import CustomerMaster from "./src/pages/CustomerMaster";
 import ItemMaster from "./src/pages/ItemMaster";
 import SalesMaster from "./src/pages/SalesMaster";
 import PurchaseMaster from "./src/pages/PurchaseMaster";
+import OrderMaster from "./src/pages/OrderMaster";
 import VehicleMaster from "./src/pages/VehicleMaster";
 import MaintenanceMaster from "./src/pages/MaintenanceMaster";
 import RouteBuilder from "./src/pages/RouteBuilder";
@@ -47,6 +48,7 @@ function App() {
       {route === "items" && <ItemMaster />}
       {route === "sales" && <SalesMaster />}
       {route === "purchase" && <PurchaseMaster />}
+      {route === "orders" && <OrderMaster />}
       {route === "vehicles" && <VehicleMaster />}
       {route === "maintenance" && <MaintenanceMaster />}
       {route === "route-builder" && <RouteBuilder />}
