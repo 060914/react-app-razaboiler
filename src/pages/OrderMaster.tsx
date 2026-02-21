@@ -38,15 +38,24 @@ const OrderMaster = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewOrderId, setViewOrderId] = useState<string | number | null>(null);
+  const [viewItems, setViewItems] = useState<OrderItem[]>([]);
+  const [viewSavingId, setViewSavingId] = useState<string | number | null>(null);
 
   const [formData, setFormData] = useState({
     customerid: "",
     orderdate: new Date().toISOString().split("T")[0],
     orderstatus: "intransit",
+    created_by: "1",
+  });
+
+  const [draftItem, setDraftItem] = useState({
     itemid: "",
     itemweight: "",
-    itemstatus: "ordered",
-    created_by: "1",
+    status: "ordered",
   });
 
   const showToast = (text: string, type: "success" | "error") => {
@@ -149,8 +158,12 @@ const OrderMaster = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.customerid || !formData.orderdate || !formData.itemid) {
+    if (!formData.customerid || !formData.orderdate) {
       showToast("Please fill in required fields", "error");
+      return;
+    }
+    if (orderItems.length === 0) {
+      showToast("Please add at least one order item", "error");
       return;
     }
     setSaving(true);
@@ -160,14 +173,12 @@ const OrderMaster = () => {
         orderdate: formData.orderdate,
         orderstatus: formData.orderstatus,
         created_by: Number(formData.created_by || 1),
-        items: [
-          {
-            itemid: Number(formData.itemid),
-            itemweight: Number(formData.itemweight || 0),
-            status: formData.itemstatus,
-            created_by: Number(formData.created_by || 1),
-          },
-        ],
+        items: orderItems.map((it) => ({
+          itemid: Number(it.itemid),
+          itemweight: Number(it.itemweight || 0),
+          status: it.status || "ordered",
+          created_by: Number(formData.created_by || 1),
+        })),
       };
 
       const res = await fetch(`${API_BASE_URL}/orders${editingId ? `/${editingId}` : ""}`, {
@@ -182,11 +193,11 @@ const OrderMaster = () => {
         customerid: "",
         orderdate: new Date().toISOString().split("T")[0],
         orderstatus: "intransit",
-        itemid: "",
-        itemweight: "",
-        itemstatus: "ordered",
         created_by: "1",
       });
+      setOrderItems([]);
+      setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+      setShowItemForm(false);
       await loadAll();
     } catch (err) {
       console.error(err);
@@ -224,18 +235,119 @@ const OrderMaster = () => {
         console.error(err);
       }
     }
-    const firstItem = rowItems[0];
     setEditingId(row.id);
     setFormData({
       customerid: String(row.customerid),
       orderdate: row.orderdate?.split("T")[0] || "",
       orderstatus: row.orderstatus || "intransit",
-      itemid: firstItem ? String(firstItem.itemid) : "",
-      itemweight: firstItem ? String(firstItem.itemweight ?? "") : "",
-      itemstatus: firstItem?.status || "ordered",
       created_by: "1",
     });
+    setOrderItems(
+      (rowItems || []).map((it) => ({
+        id: it.id,
+        itemid: String(it.itemid),
+        itemweight: Number(it.itemweight || 0),
+        status: it.status || "ordered",
+      }))
+    );
+    setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+    setShowItemForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const addOrderItem = () => {
+    if (!draftItem.itemid) {
+      showToast("Please select an item", "error");
+      return;
+    }
+    setOrderItems((prev) => [
+      ...prev,
+      {
+        id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        itemid: draftItem.itemid,
+        itemweight: Number(draftItem.itemweight || 0),
+        status: draftItem.status || "ordered",
+      },
+    ]);
+    setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+  };
+
+  const removeOrderItem = (id?: number | string) => {
+    if (!id) return;
+    setOrderItems((prev) => prev.filter((x) => String(x.id) !== String(id)));
+  };
+
+  const openViewItems = async (order: Order) => {
+    setViewOpen(true);
+    setViewOrderId(order.id);
+    try {
+      let list = order.items || [];
+      if (!list.length) {
+        list = await fetchOrderItems(order.id);
+      }
+      setViewItems(
+        list.map((it) => ({
+          id: it.id,
+          itemid: it.itemid,
+          itemweight: Number(it.itemweight || 0),
+          status: it.status || "ordered",
+        }))
+      );
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to load order items", "error");
+    }
+  };
+
+  const closeViewItems = () => {
+    setViewOpen(false);
+    setViewOrderId(null);
+    setViewItems([]);
+  };
+
+  const updateViewItem = async (it: OrderItem) => {
+    if (!viewOrderId || !it.id) return;
+    setViewSavingId(it.id);
+    try {
+      const payload = {
+        orderid: Number(viewOrderId),
+        itemid: Number(it.itemid),
+        itemweight: Number(it.itemweight || 0),
+        status: it.status || "ordered",
+        created_by: Number(formData.created_by || 1),
+      };
+      const res = await fetch(`${API_BASE_URL}/orderitems/${it.id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Update failed");
+      showToast("Order item updated", "success");
+      await loadAll();
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update item", "error");
+    } finally {
+      setViewSavingId(null);
+    }
+  };
+
+  const deleteViewItem = async (id?: number | string) => {
+    if (!id) return;
+    if (!window.confirm("Delete this order item?")) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/orderitems/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      setViewItems((prev) => prev.filter((x) => String(x.id) !== String(id)));
+      showToast("Order item deleted", "success");
+      await loadAll();
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to delete item", "error");
+    }
   };
 
   const filtered = orders.filter((o) => o.orderdate?.split("T")[0] === selectedDate);
@@ -317,7 +429,7 @@ const OrderMaster = () => {
                 <Truck size={16} />
               </div>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-blue-500">Today's Orders</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-500">Today&#39;s Orders</p>
                 <p className="text-sm font-black text-blue-900 md:text-lg tabular-nums">
                   {dayTotals.totalWeight.toFixed(2)} Kg
                 </p>
@@ -368,35 +480,6 @@ const OrderMaster = () => {
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
-                Item
-              </label>
-              <select
-                value={formData.itemid}
-                onChange={(e) => setFormData({ ...formData, itemid: e.target.value })}
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
-                required
-              >
-                <option value="">Select Item</option>
-                {items.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name || `Item ${it.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
-                Item Weight (Kg)
-              </label>
-              <input
-                type="number"
-                value={formData.itemweight}
-                onChange={(e) => setFormData({ ...formData, itemweight: e.target.value })}
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
                 Order Status
               </label>
               <select
@@ -410,21 +493,6 @@ const OrderMaster = () => {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
-                Item Status
-              </label>
-              <select
-                value={formData.itemstatus}
-                onChange={(e) => setFormData({ ...formData, itemstatus: e.target.value })}
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
-              >
-                <option value="ordered">Ordered</option>
-                <option value="packed">Packed</option>
-                <option value="shipped">Shipped</option>
-                <option value="delivered">Delivered</option>
-              </select>
-            </div>
             <div className="md:col-span-3 flex items-center justify-between">
               {editingId && (
                 <button
@@ -435,11 +503,11 @@ const OrderMaster = () => {
                       customerid: "",
                       orderdate: new Date().toISOString().split("T")[0],
                       orderstatus: "intransit",
-                      itemid: "",
-                      itemweight: "",
-                      itemstatus: "ordered",
                       created_by: "1",
                     });
+                    setOrderItems([]);
+                    setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+                    setShowItemForm(false);
                   }}
                   className="text-sm text-slate-500 underline"
                 >
@@ -455,6 +523,123 @@ const OrderMaster = () => {
                 <PlusCircle size={18} />
               </button>
             </div>
+
+            <div className="md:col-span-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Order Items</p>
+                <button
+                  type="button"
+                  onClick={() => setShowItemForm((v) => !v)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700"
+                >
+                  {showItemForm ? "Hide Add Item" : "Add Item"}
+                </button>
+              </div>
+            </div>
+
+            {showItemForm && (
+              <>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
+                    Item
+                  </label>
+                  <select
+                    value={draftItem.itemid}
+                    onChange={(e) => setDraftItem({ ...draftItem, itemid: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                  >
+                    <option value="">Select Item</option>
+                    {items.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name || `Item ${it.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
+                    Item Weight (Kg)
+                  </label>
+                  <input
+                    type="number"
+                    value={draftItem.itemweight}
+                    onChange={(e) => setDraftItem({ ...draftItem, itemweight: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
+                    Item Status
+                  </label>
+                  <select
+                    value={draftItem.status}
+                    onChange={(e) => setDraftItem({ ...draftItem, status: e.target.value })}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
+                  >
+                    <option value="ordered">Ordered</option>
+                    <option value="packed">Packed</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                </div>
+                <div className="md:col-span-3 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={addOrderItem}
+                    className="px-6 py-2 rounded-lg font-bold text-white shadow-md bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    Add Order Item
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="md:col-span-3">
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Item</th>
+                      <th className="px-4 py-3 text-right">Weight</th>
+                      <th className="px-4 py-3 text-center">Status</th>
+                      <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {orderItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-slate-400">
+                          No items added yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      orderItems.map((it) => (
+                        <tr key={it.id ?? `${it.itemid}`}>
+                          <td className="px-4 py-3 font-semibold text-slate-700">{getItemName(it.itemid)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                            {Number(it.itemweight || 0).toFixed(2)} Kg
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700">
+                              {it.status || "ordered"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => removeOrderItem(it.id)}
+                              className="text-xs font-bold text-red-600 hover:text-red-700"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </form>
         </div>
 
@@ -464,44 +649,40 @@ const OrderMaster = () => {
               <thead className="bg-slate-50/80 uppercase text-[10px] font-black tracking-widest text-slate-400 border-b border-slate-200">
                 <tr>
                   <th className="px-5 py-4">Customer</th>
-                  <th className="px-5 py-4">Item</th>
-                  <th className="px-5 py-4 text-right">Weight (Kg)</th>
-                  <th className="px-5 py-4 text-center">Order Status</th>
-                  <th className="px-5 py-4 text-center">Item Status</th>
+                  <th className="px-5 py-4">Order Status</th>
+                  <th className="px-5 py-4">Order Date</th>
                   <th className="px-5 py-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-24 text-center text-slate-400">
+                    <td colSpan={4} className="py-24 text-center text-slate-400">
                       No orders logged for {selectedDate}.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((row) => {
-                    const weight = (row.items || []).reduce((sum, it) => sum + Number(it.itemweight || 0), 0);
-                    const firstItem = row.items?.[0];
-                    const itemLabel = firstItem
-                      ? `${getItemName(firstItem.itemid)}${row.items.length > 1 ? ` +${row.items.length - 1}` : ""}`
-                      : "—";
                     return (
                       <tr key={row.id} className="group hover:bg-blue-50/30 transition-colors">
                         <td className="px-5 py-3 font-bold text-slate-800">{getCustomerName(row.customerid)}</td>
-                        <td className="px-5 py-3 text-slate-700 font-semibold">{itemLabel}</td>
-                        <td className="px-5 py-3 text-right tabular-nums text-slate-600">{weight.toFixed(2)} Kg</td>
-                        <td className="px-5 py-3 text-center">
+                        <td className="px-5 py-3">
                           <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700">
                             {row.orderstatus || "ordered"}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700">
-                            {firstItem?.status || "ordered"}
-                          </span>
+                        <td className="px-5 py-3 text-slate-700 font-semibold">
+                          {row.orderdate?.split("T")[0] || ""}
                         </td>
                         <td className="px-5 py-3 text-center">
                           <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openViewItems(row)}
+                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                              title="View Items"
+                            >
+                              <ShoppingCart size={16} />
+                            </button>
                             <button
                               onClick={() => startEdit(row)}
                               className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -526,7 +707,7 @@ const OrderMaster = () => {
               {filtered.length > 0 && (
                 <tfoot className="bg-slate-900 text-white shadow-2xl">
                   <tr>
-                    <td colSpan={3} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
+                    <td colSpan={2} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
                       Total for {selectedDate}
                     </td>
                     <td className="px-5 py-4 text-right tabular-nums font-bold">
@@ -535,7 +716,6 @@ const OrderMaster = () => {
                     <td className="px-5 py-4 text-right tabular-nums text-xl font-black text-blue-400">
                       {dayTotals.totalItems} Items
                     </td>
-                    <td></td>
                   </tr>
                 </tfoot>
               )}
@@ -552,6 +732,94 @@ const OrderMaster = () => {
           </p>
         </div>
       </main>
+
+      {viewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-600">Order Items</h3>
+                <p className="text-xs text-slate-400">Order ID: {viewOrderId}</p>
+              </div>
+              <button onClick={closeViewItems} className="text-sm font-bold text-slate-500">
+                Close
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-4 py-3 text-right">Weight</th>
+                    <th className="px-4 py-3 text-center">Status</th>
+                    <th className="px-4 py-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {viewItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-10 text-center text-slate-400">
+                        No items found for this order.
+                      </td>
+                    </tr>
+                  ) : (
+                    viewItems.map((it, idx) => (
+                      <tr key={it.id ?? `${it.itemid}-${idx}`}>
+                        <td className="px-4 py-3 font-semibold text-slate-700">{getItemName(it.itemid)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <input
+                            type="number"
+                            value={it.itemweight}
+                            onChange={(e) =>
+                              setViewItems((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, itemweight: Number(e.target.value) } : x))
+                              )
+                            }
+                            className="w-28 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <select
+                            value={it.status || "ordered"}
+                            onChange={(e) =>
+                              setViewItems((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, status: e.target.value } : x))
+                              )
+                            }
+                            className="px-2 py-1 border border-slate-200 rounded-md text-sm"
+                          >
+                            <option value="ordered">Ordered</option>
+                            <option value="packed">Packed</option>
+                            <option value="shipped">Shipped</option>
+                            <option value="delivered">Delivered</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => updateViewItem(it)}
+                              disabled={viewSavingId === it.id}
+                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400"
+                            >
+                              {viewSavingId === it.id ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              onClick={() => deleteViewItem(it.id)}
+                              className="text-xs font-bold text-red-600 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
