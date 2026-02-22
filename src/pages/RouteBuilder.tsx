@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Calendar,
-  CheckCircle2,
-  ClipboardList,
-  Plus,
-  Route,
-  Store,
-  Truck,
-  UserCircle,
-  XCircle,
-} from "lucide-react";
+import { Calendar, ClipboardList, Plus, Route, Store, Truck, UserCircle, XCircle } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
@@ -79,7 +69,6 @@ const RouteBuilder = () => {
     created_by: "1",
   });
 
-  const [editingStopId, setEditingStopId] = useState<string | number | null>(null);
 
   const getAuthHeaders = (options?: { json?: boolean }) => {
     const token = getCookie("auth_token");
@@ -261,26 +250,25 @@ const RouteBuilder = () => {
       setActiveRouteId(null);
       setStops([]);
     }
-    setEditingStopId(null);
     setStopForm({ customerid: "", itemid: "", itemqty: "", itemweight: "", rateofsale: "", created_by: "1" });
   }, [routeForm.type, fixedRoute]);
 
   useEffect(() => {
     if (routeForm.type !== "fixed") return;
     if (!fixedRoute) return;
-    if (editingStopId) return;
     if (stops.length === 0) return;
     const first = stops[0];
-    setStopForm({
+    setStopForm((prev) => ({
+      ...prev,
       customerid: String(first.customerid || ""),
       itemid: String(first.itemid || ""),
-      itemqty: String(first.itemqty || ""),
-      itemweight: String(first.itemweight || ""),
-      rateofsale: String(first.rateofsale || ""),
-      created_by: "1",
-    });
-    setEditingStopId(first.id);
-  }, [routeForm.type, fixedRoute, stops, editingStopId]);
+    }));
+  }, [routeForm.type, fixedRoute, stops]);
+
+  useEffect(() => {
+    if (routeForm.type !== "variable") return;
+    setStopForm((prev) => ({ ...prev, customerid: "", itemid: "" }));
+  }, [routeForm.type]);
 
   useEffect(() => {
     if (!activeRouteId) {
@@ -365,10 +353,6 @@ const RouteBuilder = () => {
       setError("Please create a route header first.");
       return;
     }
-    if (routeForm.type === "fixed" && fixedRoute && !editingStopId) {
-      setError("Fixed route already exists. Please edit an existing stop.");
-      return;
-    }
     if (!stopForm.customerid || !stopForm.itemid || !stopForm.itemqty) {
       setError(`Please select ${customerTab === "Hotel" ? "hotel" : "shop"}, item and quantity.`);
       return;
@@ -385,17 +369,13 @@ const RouteBuilder = () => {
         rateofsale: Number(stopForm.rateofsale || 0),
         created_by: Number(stopForm.created_by),
       };
-      const res = await fetch(
-        `${API_BASE_URL}/route-stops${editingStopId ? `/${editingStopId}` : ""}`,
-        {
-          method: editingStopId ? "PUT" : "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`${API_BASE_URL}/route-stops`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) throw new Error("Save stop failed");
       setStopForm({ customerid: "", itemid: "", itemqty: "", itemweight: "", rateofsale: "", created_by: "1" });
-      setEditingStopId(null);
       const s = await fetchStops(activeRouteId);
       setStops(s);
     } catch (err) {
@@ -404,18 +384,6 @@ const RouteBuilder = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleEditStop = (stop: RouteStop) => {
-    setStopForm({
-      customerid: String(stop.customerid || ""),
-      itemid: String(stop.itemid || ""),
-      itemqty: String(stop.itemqty || ""),
-      itemweight: String(stop.itemweight || ""),
-      rateofsale: String(stop.rateofsale || ""),
-      created_by: "1",
-    });
-    setEditingStopId(stop.id);
   };
 
   const handleDeleteStop = async (id: string | number) => {
@@ -526,7 +494,7 @@ const RouteBuilder = () => {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="grid grid-cols-1 gap-6">
           {/* Route Header */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
@@ -621,8 +589,7 @@ const RouteBuilder = () => {
               </div>
             )}
 
-            {(routeForm.type !== "fixed" || !fixedRoute || editingStopId) && (
-              <form onSubmit={handleSaveStop} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <form onSubmit={handleSaveStop} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   {customerTab === "Hotel" ? "Select Hotel" : "Select Shop"}
@@ -697,22 +664,9 @@ const RouteBuilder = () => {
                 disabled={saving}
                 className="md:col-span-2 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-full shadow-lg transition-all disabled:bg-slate-400"
               >
-                {editingStopId ? "Update Stop" : "Add Stop To Truck"}
+                Add Stop To Truck
               </button>
-              {editingStopId && (
-                <button
-                  type="button"
-                  className="md:col-span-2 text-xs text-slate-500 underline"
-                  onClick={() => {
-                    setEditingStopId(null);
-                    setStopForm({ customerid: "", itemid: "", itemqty: "", itemweight: "", rateofsale: "", created_by: "1" });
-                  }}
-                >
-                  Cancel edit
-                </button>
-              )}
             </form>
-            )}
 
             <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6">
               {filteredStops.length === 0 ? (
@@ -740,13 +694,6 @@ const RouteBuilder = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditStop(stop)}
-                            className="p-2 rounded-lg hover:bg-slate-200 text-slate-500"
-                            title="Edit"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
                           <button
                             onClick={() => handleDeleteStop(stop.id)}
                             className="p-2 rounded-lg hover:bg-red-50 text-red-500"
@@ -867,13 +814,6 @@ const RouteBuilder = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleEditStop(stop)}
-                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                              title="Edit"
-                            >
-                              <CheckCircle2 size={16} />
-                            </button>
                             <button
                               onClick={() => handleDeleteStop(stop.id)}
                               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
