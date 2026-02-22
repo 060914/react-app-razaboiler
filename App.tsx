@@ -48,6 +48,8 @@ function App() {
       {route === "items" && <ItemMaster />}
       {route === "sales" && <SalesMaster />}
       {route === "purchase" && <PurchaseMaster />}
+      {route === "sales-reports" && <SalesMaster />}
+      {route === "purchase-reports" && <PurchaseMaster />}
       {route === "orders" && <OrderMaster />}
       {route === "vehicles" && <VehicleMaster />}
       {route === "maintenance" && <MaintenanceMaster />}

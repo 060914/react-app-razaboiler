@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 type Props = {
   children: React.ReactNode;
@@ -9,6 +9,13 @@ type Props = {
 };
 
 const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => {
+  const [dailyOpen, setDailyOpen] = useState(true);
+  const [masterOpen, setMasterOpen] = useState(true);
+  const [reportsOpen, setReportsOpen] = useState(true);
+
+  const sectionButtonClass =
+    "w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider text-slate-400 hover:bg-slate-50 flex items-center justify-between";
+
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-900">
       <aside className="w-64 bg-white border-r p-4">
@@ -25,79 +32,123 @@ const MainLayout = ({ children, onLogout, onNavigate, active, user }: Props) => 
             Dashboard
           </button>
 
-          <div className="mt-4 mb-2">
-            <p className="text-xs font-semibold text-slate-400 px-3 uppercase tracking-wider">Masters</p>
+          <div className="mt-4">
+            <button
+              type="button"
+              className={sectionButtonClass}
+              onClick={() => setDailyOpen((v) => !v)}
+              aria-expanded={dailyOpen}
+            >
+              Daily Activity
+              <span>{dailyOpen ? "−" : "+"}</span>
+            </button>
           </div>
 
-          <button
-            onClick={() => onNavigate("users")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "users" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            1. User Master
-          </button>
+          {dailyOpen && (
+            <>
+              <button
+                onClick={() => onNavigate("orders")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "orders" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Order
+              </button>
 
-          <button
-            onClick={() => onNavigate("companies")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "companies" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            2. Company Master
-          </button>
+              <button
+                onClick={() => onNavigate("route-builder")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "route-builder" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Route
+              </button>
 
-          <button
-            onClick={() => onNavigate("customers")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "customers" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            3. Customer Master
-          </button>
+              <button
+                onClick={() => onNavigate("sales")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "sales" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Sale
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => onNavigate("items")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "items" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            4. Item Master
-          </button>
+          <div className="mt-4">
+            <button
+              type="button"
+              className={sectionButtonClass}
+              onClick={() => setMasterOpen((v) => !v)}
+              aria-expanded={masterOpen}
+            >
+              Master
+              <span>{masterOpen ? "−" : "+"}</span>
+            </button>
+          </div>
 
-          <button
-            onClick={() => onNavigate("sales")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "sales" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            5. Sales Master
-          </button>
+          {masterOpen && (
+            <>
+              <button
+                onClick={() => onNavigate("users")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "users" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                User
+              </button>
 
-          <button
-            onClick={() => onNavigate("purchase")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "purchase" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            6. Purchase Master
-          </button>
+              <button
+                onClick={() => onNavigate("companies")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "companies" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Company
+              </button>
 
-          <button
-            onClick={() => onNavigate("orders")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "orders" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            7. Order Master
-          </button>
+              <button
+                onClick={() => onNavigate("customers")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "customers" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Customer
+              </button>
 
-          <button
-            onClick={() => onNavigate("vehicles")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "vehicles" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            8. Vehicle Master
-          </button>
+              <button
+                onClick={() => onNavigate("vehicles")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "vehicles" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Vehicle
+              </button>
 
-          <button
-            onClick={() => onNavigate("maintenance")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "maintenance" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            9. Maintenance Master
-          </button>
+              <button
+                onClick={() => onNavigate("items")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "items" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Item
+              </button>
+            </>
+          )}
 
-          <button
-            onClick={() => onNavigate("route-builder")}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "route-builder" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
-          >
-            10. Route Builder
-          </button>
+          <div className="mt-4">
+            <button
+              type="button"
+              className={sectionButtonClass}
+              onClick={() => setReportsOpen((v) => !v)}
+              aria-expanded={reportsOpen}
+            >
+              Reports
+              <span>{reportsOpen ? "−" : "+"}</span>
+            </button>
+          </div>
+
+          {reportsOpen && (
+            <>
+              <button
+                onClick={() => onNavigate("sales-reports")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "sales-reports" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Sales Reports
+              </button>
+
+              <button
+                onClick={() => onNavigate("purchase-reports")}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm ${active === "purchase-reports" ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+              >
+                Purchase Reports
+              </button>
+            </>
+          )}
         </nav>
 
         <div className="mt-6">

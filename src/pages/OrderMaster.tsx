@@ -44,6 +44,8 @@ const OrderMaster = () => {
   const [viewOrderId, setViewOrderId] = useState<string | number | null>(null);
   const [viewItems, setViewItems] = useState<OrderItem[]>([]);
   const [viewSavingId, setViewSavingId] = useState<string | number | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [draftErrors, setDraftErrors] = useState<{ itemid?: string; itemweight?: string }>({});
 
   const [formData, setFormData] = useState({
     customerid: "",
@@ -256,8 +258,15 @@ const OrderMaster = () => {
   };
 
   const addOrderItem = () => {
+    const nextErrors: { itemid?: string; itemweight?: string } = {};
     if (!draftItem.itemid) {
-      showToast("Please select an item", "error");
+      nextErrors.itemid = "Item is required";
+    }
+    if (!draftItem.itemweight || Number(draftItem.itemweight) <= 0) {
+      nextErrors.itemweight = "Item weight is required";
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setDraftErrors(nextErrors);
       return;
     }
     setOrderItems((prev) => [
@@ -270,6 +279,7 @@ const OrderMaster = () => {
       },
     ]);
     setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+    setDraftErrors({});
   };
 
   const removeOrderItem = (id?: number | string) => {
@@ -350,7 +360,27 @@ const OrderMaster = () => {
     }
   };
 
+  const getCustomerName = (id: number | string) => {
+    const c = customers.find((x) => String(x.id) === String(id));
+    return c?.name || `Customer ${id}`;
+  };
+
+  const getItemName = (id: number | string) => {
+    const it = items.find((x) => String(x.id) === String(id));
+    return it?.name || `Item ${id}`;
+  };
+
   const filtered = orders.filter((o) => o.orderdate?.split("T")[0] === selectedDate);
+  const filteredOrders = useMemo(() => {
+    const q = orderSearch.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((row) => {
+      const customer = getCustomerName(row.customerid).toLowerCase();
+      const status = (row.orderstatus || "").toLowerCase();
+      const date = (row.orderdate || "").split("T")[0].toLowerCase();
+      return customer.includes(q) || status.includes(q) || date.includes(q);
+    });
+  }, [filtered, orderSearch, customers]);
 
   const dayTotals = useMemo(() => {
     return filtered.reduce(
@@ -363,16 +393,6 @@ const OrderMaster = () => {
       { totalWeight: 0, totalItems: 0 }
     );
   }, [filtered]);
-
-  const getCustomerName = (id: number | string) => {
-    const c = customers.find((x) => String(x.id) === String(id));
-    return c?.name || `Customer ${id}`;
-  };
-
-  const getItemName = (id: number | string) => {
-    const it = items.find((x) => String(x.id) === String(id));
-    return it?.name || `Item ${id}`;
-  };
 
   if (loading) {
     return (
@@ -493,37 +513,6 @@ const OrderMaster = () => {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
-            <div className="md:col-span-3 flex items-center justify-between">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingId(null);
-                    setFormData({
-                      customerid: "",
-                      orderdate: new Date().toISOString().split("T")[0],
-                      orderstatus: "intransit",
-                      created_by: "1",
-                    });
-                    setOrderItems([]);
-                    setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
-                    setShowItemForm(false);
-                  }}
-                  className="text-sm text-slate-500 underline"
-                >
-                  Cancel edit
-                </button>
-              )}
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400"
-              >
-                {saving ? "Saving..." : editingId ? "Update Order" : "Save Order"}
-                <PlusCircle size={18} />
-              </button>
-            </div>
-
             <div className="md:col-span-3">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Order Items</p>
@@ -545,7 +534,10 @@ const OrderMaster = () => {
                   </label>
                   <select
                     value={draftItem.itemid}
-                    onChange={(e) => setDraftItem({ ...draftItem, itemid: e.target.value })}
+                    onChange={(e) => {
+                      setDraftItem({ ...draftItem, itemid: e.target.value });
+                      setDraftErrors((prev) => ({ ...prev, itemid: "" }));
+                    }}
                     className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
                   >
                     <option value="">Select Item</option>
@@ -555,6 +547,9 @@ const OrderMaster = () => {
                       </option>
                     ))}
                   </select>
+                  {draftErrors.itemid && (
+                    <p className="mt-1 text-xs text-red-600">{draftErrors.itemid}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
@@ -563,9 +558,15 @@ const OrderMaster = () => {
                   <input
                     type="number"
                     value={draftItem.itemweight}
-                    onChange={(e) => setDraftItem({ ...draftItem, itemweight: e.target.value })}
+                    onChange={(e) => {
+                      setDraftItem({ ...draftItem, itemweight: e.target.value });
+                      setDraftErrors((prev) => ({ ...prev, itemweight: "" }));
+                    }}
                     className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none"
                   />
+                  {draftErrors.itemweight && (
+                    <p className="mt-1 text-xs text-red-600">{draftErrors.itemweight}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block tracking-widest">
@@ -593,6 +594,10 @@ const OrderMaster = () => {
                 </div>
               </>
             )}
+
+            <div className="md:col-span-3">
+              <p className="text-xs text-red-600">Please add at least one order item</p>
+            </div>
 
             <div className="md:col-span-3">
               <div className="overflow-hidden rounded-xl border border-slate-200">
@@ -640,10 +645,51 @@ const OrderMaster = () => {
                 </table>
               </div>
             </div>
+
+            <div className="md:col-span-3 flex items-center justify-between">
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setFormData({
+                      customerid: "",
+                      orderdate: new Date().toISOString().split("T")[0],
+                      orderstatus: "intransit",
+                      created_by: "1",
+                    });
+                    setOrderItems([]);
+                    setDraftItem({ itemid: "", itemweight: "", status: "ordered" });
+                    setShowItemForm(false);
+                  }}
+                  className="text-sm text-slate-500 underline"
+                >
+                  Cancel edit
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400"
+              >
+                {saving ? "Saving..." : editingId ? "Update Order" : "Save Order"}
+                <PlusCircle size={18} />
+              </button>
+            </div>
           </form>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 bg-slate-50/80">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Orders</p>
+            <input
+              type="text"
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+              placeholder="Filter by customer, status, or date"
+              className="h-9 w-full sm:w-72 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500"
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-slate-50/80 uppercase text-[10px] font-black tracking-widest text-slate-400 border-b border-slate-200">
@@ -655,14 +701,14 @@ const OrderMaster = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-24 text-center text-slate-400">
-                      No orders logged for {selectedDate}.
+                      No orders found for {selectedDate}.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((row) => {
+                  filteredOrders.map((row) => {
                     return (
                       <tr key={row.id} className="group hover:bg-blue-50/30 transition-colors">
                         <td className="px-5 py-3 font-bold text-slate-800">{getCustomerName(row.customerid)}</td>
