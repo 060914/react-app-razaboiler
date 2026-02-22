@@ -32,6 +32,7 @@ type RouteRow = {
   driverid: number | string;
   deliverydate: string;
   status?: string;
+  type?: string;
 };
 
 type RouteStop = {
@@ -58,6 +59,7 @@ const RouteBuilder = () => {
   const [customerTab, setCustomerTab] = useState<"Hotel" | "Shop">("Hotel");
   const [routeDateFilter, setRouteDateFilter] = useState("");
   const [stopSearch, setStopSearch] = useState("");
+  const [fixedRoute, setFixedRoute] = useState<RouteRow | null>(null);
 
   const [routeForm, setRouteForm] = useState({
     vehicleid: "",
@@ -187,6 +189,99 @@ const RouteBuilder = () => {
     }
   }, [routeForm.type, routeForm.vehicleid, routeForm.driverid, vehicles, drivers]);
 
+  const fetchFixedRoute = async () => {
+    if (routeForm.type !== "fixed") {
+      setFixedRoute(null);
+      return;
+    }
+    if (!routeForm.vehicleid || !routeForm.driverid) {
+      setFixedRoute(null);
+      return;
+    }
+    try {
+      const params = new URLSearchParams();
+      params.set("vehicleid", String(routeForm.vehicleid));
+      params.set("driverid", String(routeForm.driverid));
+      params.set("type", "fixed");
+      if (routeForm.deliverydate) {
+        params.set("deliverydate", routeForm.deliverydate.split("T")[0]);
+      }
+      let res = await fetch(`${API_BASE_URL}/route-builder/filter?${params.toString()}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        res = await fetch(`${API_BASE_URL}/route-builder/filter`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            vehicleid: Number(routeForm.vehicleid),
+            driverid: Number(routeForm.driverid),
+            type: "fixed",
+            deliverydate: routeForm.deliverydate?.split("T")[0],
+          }),
+        });
+      }
+      if (!res.ok) {
+        setFixedRoute(null);
+        return;
+      }
+      const data = await res.json();
+      const list = (data.data || data || []) as any[];
+      const route = Array.isArray(list) ? list[0] : list;
+      const normalized: RouteRow | null = route
+        ? {
+            id: route.id ?? route.routeid ?? route.route_id ?? route._id,
+            vehicleid: route.vehicleid ?? route.vehicle_id ?? "",
+            driverid: route.driverid ?? route.driver_id ?? "",
+            deliverydate: route.deliverydate ?? route.delivery_date ?? "",
+            status: route.status,
+            type: route.type ?? "fixed",
+          }
+        : null;
+      setFixedRoute(normalized?.id ? normalized : null);
+    } catch (err) {
+      console.error(err);
+      setFixedRoute(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchFixedRoute();
+  }, [routeForm.type, routeForm.vehicleid, routeForm.driverid, routeForm.deliverydate]);
+
+  useEffect(() => {
+    if (routeForm.type !== "fixed") {
+      setFixedRoute(null);
+      return;
+    }
+    if (fixedRoute) {
+      setActiveRouteId(fixedRoute.id);
+    } else {
+      setActiveRouteId(null);
+      setStops([]);
+    }
+    setEditingStopId(null);
+    setStopForm({ customerid: "", itemid: "", itemqty: "", itemweight: "", rateofsale: "", created_by: "1" });
+  }, [routeForm.type, fixedRoute]);
+
+  useEffect(() => {
+    if (routeForm.type !== "fixed") return;
+    if (!fixedRoute) return;
+    if (editingStopId) return;
+    if (stops.length === 0) return;
+    const first = stops[0];
+    setStopForm({
+      customerid: String(first.customerid || ""),
+      itemid: String(first.itemid || ""),
+      itemqty: String(first.itemqty || ""),
+      itemweight: String(first.itemweight || ""),
+      rateofsale: String(first.rateofsale || ""),
+      created_by: "1",
+    });
+    setEditingStopId(first.id);
+  }, [routeForm.type, fixedRoute, stops, editingStopId]);
+
   useEffect(() => {
     if (!activeRouteId) {
       setStops([]);
@@ -268,6 +363,10 @@ const RouteBuilder = () => {
     e.preventDefault();
     if (!activeRouteId) {
       setError("Please create a route header first.");
+      return;
+    }
+    if (routeForm.type === "fixed" && fixedRoute && !editingStopId) {
+      setError("Fixed route already exists. Please edit an existing stop.");
       return;
     }
     if (!stopForm.customerid || !stopForm.itemid || !stopForm.itemqty) {
@@ -455,7 +554,6 @@ const RouteBuilder = () => {
                   value={routeForm.vehicleid}
                   onChange={(e) => setRouteForm({ ...routeForm, vehicleid: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm"
-                  disabled={routeForm.type === "fixed"}
                 >
                   <option value="">Select Vehicle</option>
                   {vehicles.map((v) => (
@@ -474,7 +572,6 @@ const RouteBuilder = () => {
                   value={routeForm.driverid}
                   onChange={(e) => setRouteForm({ ...routeForm, driverid: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm"
-                  disabled={routeForm.type === "fixed"}
                 >
                   <option value="">Select Driver</option>
                   {drivers.map((d) => (
@@ -518,7 +615,14 @@ const RouteBuilder = () => {
               <Plus size={14} /> {customerTab} Stop Builder
             </div>
 
-            <form onSubmit={handleSaveStop} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            {routeForm.type === "fixed" && fixedRoute && (
+              <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2">
+                Fixed route found for this vehicle/driver/date. Stops loaded below.
+              </div>
+            )}
+
+            {(routeForm.type !== "fixed" || !fixedRoute || editingStopId) && (
+              <form onSubmit={handleSaveStop} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
               <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">
                   {customerTab === "Hotel" ? "Select Hotel" : "Select Shop"}
@@ -527,6 +631,7 @@ const RouteBuilder = () => {
                   value={stopForm.customerid}
                   onChange={(e) => setStopForm({ ...stopForm, customerid: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm"
+                  disabled={routeForm.type === "fixed" && !!fixedRoute}
                 >
                   <option value="">{customerTab === "Hotel" ? "Select Hotel" : "Select Shop"}</option>
                   {filteredCustomers.map((c) => (
@@ -543,6 +648,7 @@ const RouteBuilder = () => {
                   value={stopForm.itemid}
                   onChange={(e) => setStopForm({ ...stopForm, itemid: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm"
+                  disabled={routeForm.type === "fixed" && !!fixedRoute}
                 >
                   <option value="">Select Item</option>
                   {items.map((i) => (
@@ -606,6 +712,7 @@ const RouteBuilder = () => {
                 </button>
               )}
             </form>
+            )}
 
             <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6">
               {filteredStops.length === 0 ? (
