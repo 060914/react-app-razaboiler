@@ -10,6 +10,7 @@ import {
   Truck,
 } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -30,6 +31,14 @@ type Order = {
 };
 
 const OrderMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canEdit = isAdmin || hasPermission(authUser, "edit");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+  const canMutate = canCreate || canEdit;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -155,11 +164,23 @@ const OrderMaster = () => {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     loadAll();
-  }, []);
+  }, [canView]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      showToast("You do not have permission to update orders", "error");
+      return;
+    }
+    if (!editingId && !canCreate) {
+      showToast("You do not have permission to create orders", "error");
+      return;
+    }
     if (!formData.customerid || !formData.orderdate) {
       showToast("Please fill in required fields", "error");
       return;
@@ -210,6 +231,10 @@ const OrderMaster = () => {
   };
 
   const handleDelete = async (id: string | number) => {
+    if (!canDelete) {
+      showToast("You do not have permission to delete orders", "error");
+      return;
+    }
     if (!window.confirm("Delete this order?")) return;
     setSaving(true);
     try {
@@ -229,6 +254,10 @@ const OrderMaster = () => {
   };
 
   const startEdit = async (row: Order) => {
+    if (!canEdit) {
+      showToast("You do not have permission to edit orders", "error");
+      return;
+    }
     let rowItems = row.items || [];
     if (!rowItems.length) {
       try {
@@ -405,6 +434,10 @@ const OrderMaster = () => {
     );
   }
 
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view Order Master.</div>;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {msg && (
@@ -461,7 +494,8 @@ const OrderMaster = () => {
       </header>
 
       <main className="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-600">
               {editingId ? "Update Order" : "Create Order"}
@@ -677,7 +711,8 @@ const OrderMaster = () => {
               </button>
             </div>
           </form>
-        </div>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50">
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 bg-slate-50/80">
@@ -697,13 +732,13 @@ const OrderMaster = () => {
                   <th className="px-5 py-4">Customer</th>
                   <th className="px-5 py-4">Order Status</th>
                   <th className="px-5 py-4">Order Date</th>
-                  <th className="px-5 py-4 text-center">Action</th>
+                  {(canEdit || canDelete) && <th className="px-5 py-4 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-24 text-center text-slate-400">
+                    <td colSpan={canEdit || canDelete ? 4 : 3} className="py-24 text-center text-slate-400">
                       No orders found for {selectedDate}.
                     </td>
                   </tr>
@@ -720,31 +755,30 @@ const OrderMaster = () => {
                         <td className="px-5 py-3 text-slate-700 font-semibold">
                           {row.orderdate?.split("T")[0] || ""}
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => openViewItems(row)}
-                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                              title="View Items"
-                            >
-                              <ShoppingCart size={16} />
-                            </button>
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                              title="Edit"
-                            >
-                              <ClipboardEdit size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(row.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-5 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEdit(row)}
+                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                  title="Edit"
+                                >
+                                  <ClipboardEdit size={16} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(row.id)}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -752,17 +786,31 @@ const OrderMaster = () => {
               </tbody>
               {filtered.length > 0 && (
                 <tfoot className="bg-slate-900 text-white shadow-2xl">
-                  <tr>
-                    <td colSpan={2} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
-                      Total for {selectedDate}
-                    </td>
-                    <td className="px-5 py-4 text-right tabular-nums font-bold">
-                      {dayTotals.totalWeight.toFixed(2)} Kg
-                    </td>
-                    <td className="px-5 py-4 text-right tabular-nums text-xl font-black text-blue-400">
-                      {dayTotals.totalItems} Items
-                    </td>
-                  </tr>
+                  {canEdit || canDelete ? (
+                    <tr>
+                      <td colSpan={2} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
+                        Total for {selectedDate}
+                      </td>
+                      <td className="px-5 py-4 text-right tabular-nums font-bold">
+                        {dayTotals.totalWeight.toFixed(2)} Kg
+                      </td>
+                      <td className="px-5 py-4 text-right tabular-nums text-xl font-black text-blue-400">
+                        {dayTotals.totalItems} Items
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
+                        Total for {selectedDate}
+                      </td>
+                      <td className="px-5 py-4 text-right tabular-nums font-bold">
+                        {dayTotals.totalWeight.toFixed(2)} Kg
+                      </td>
+                      <td className="px-5 py-4 text-right tabular-nums text-xl font-black text-blue-400">
+                        {dayTotals.totalItems} Items
+                      </td>
+                    </tr>
+                  )}
                 </tfoot>
               )}
             </table>
@@ -798,13 +846,13 @@ const OrderMaster = () => {
                     <th className="px-4 py-3">Item</th>
                     <th className="px-4 py-3 text-right">Weight</th>
                     <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-center">Action</th>
+                    {(canEdit || canDelete) && <th className="px-4 py-3 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {viewItems.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-10 text-center text-slate-400">
+                      <td colSpan={canEdit || canDelete ? 4 : 3} className="py-10 text-center text-slate-400">
                         No items found for this order.
                       </td>
                     </tr>
@@ -813,50 +861,66 @@ const OrderMaster = () => {
                       <tr key={it.id ?? `${it.itemid}-${idx}`}>
                         <td className="px-4 py-3 font-semibold text-slate-700">{getItemName(it.itemid)}</td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={it.itemweight}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, itemweight: Number(e.target.value) } : x))
-                              )
-                            }
-                            className="w-28 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
-                          />
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              value={it.itemweight}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, itemweight: Number(e.target.value) } : x))
+                                )
+                              }
+                              className="w-28 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.itemweight}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <select
-                            value={it.status || "ordered"}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, status: e.target.value } : x))
-                              )
-                            }
-                            className="px-2 py-1 border border-slate-200 rounded-md text-sm"
-                          >
-                            <option value="ordered">Ordered</option>
-                            <option value="packed">Packed</option>
-                            <option value="shipped">Shipped</option>
-                            <option value="delivered">Delivered</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => updateViewItem(it)}
-                              disabled={viewSavingId === it.id}
-                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400"
+                          {canEdit ? (
+                            <select
+                              value={it.status || "ordered"}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, status: e.target.value } : x))
+                                )
+                              }
+                              className="px-2 py-1 border border-slate-200 rounded-md text-sm"
                             >
-                              {viewSavingId === it.id ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              onClick={() => deleteViewItem(it.id)}
-                              className="text-xs font-bold text-red-600 hover:text-red-700"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                              <option value="ordered">Ordered</option>
+                              <option value="packed">Packed</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                            </select>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-600 uppercase">
+                              {it.status || "ordered"}
+                            </span>
+                          )}
                         </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() => updateViewItem(it)}
+                                  disabled={viewSavingId === it.id}
+                                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400"
+                                >
+                                  {viewSavingId === it.id ? "Saving..." : "Save"}
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => deleteViewItem(it.id)}
+                                  className="text-xs font-bold text-red-600 hover:text-red-700"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

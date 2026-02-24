@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -36,6 +37,14 @@ type SaleItem = {
 };
 
 const SalesMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canEdit = isAdmin || hasPermission(authUser, "edit");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+  const canMutate = canCreate || canEdit;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -159,8 +168,12 @@ const SalesMaster = () => {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     loadAll();
-  }, []);
+  }, [canView]);
 
   const computeTotalSale = (item: {
     itemweight: number | string;
@@ -216,6 +229,14 @@ const SalesMaster = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      showToast("You do not have permission to update sales", "error");
+      return;
+    }
+    if (!editingId && !canCreate) {
+      showToast("You do not have permission to create sales", "error");
+      return;
+    }
     if (!formData.customerid || !formData.saledate) {
       showToast("Please fill required fields", "error");
       return;
@@ -301,6 +322,10 @@ const SalesMaster = () => {
   };
 
   const handleDelete = async (id: string | number) => {
+    if (!canDelete) {
+      showToast("You do not have permission to delete sales", "error");
+      return;
+    }
     if (!window.confirm("Delete this sale?")) return;
     setSaving(true);
     try {
@@ -320,6 +345,10 @@ const SalesMaster = () => {
   };
 
   const startEdit = (row: Sale) => {
+    if (!canEdit) {
+      showToast("You do not have permission to edit sales", "error");
+      return;
+    }
     setEditingId(row.id);
     setFormData({
       customerid: String(row.customerid),
@@ -443,6 +472,10 @@ const SalesMaster = () => {
     );
   }
 
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view Sales Master.</div>;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {msg && (
@@ -498,7 +531,8 @@ const SalesMaster = () => {
       </header>
 
       <main className="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-600">
               {editingId ? "Update Sale" : "Create Sale"}
@@ -806,13 +840,13 @@ const SalesMaster = () => {
                   <th className="px-5 py-4">Date</th>
                   <th className="px-5 py-4 text-right">Items</th>
                   <th className="px-5 py-4 text-right">Total</th>
-                  <th className="px-5 py-4 text-center">Action</th>
+                  {(canEdit || canDelete) && <th className="px-5 py-4 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-24 text-center text-slate-400">
+                    <td colSpan={canEdit || canDelete ? 6 : 5} className="py-24 text-center text-slate-400">
                       No sales found for {selectedDate}.
                     </td>
                   </tr>
@@ -835,31 +869,30 @@ const SalesMaster = () => {
                         <td className="px-5 py-3 text-right tabular-nums font-bold text-slate-900">
                           ₹{total.toFixed(2)}
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => openViewItems(row.id)}
-                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                              title="View Items"
-                            >
-                              <ShoppingCart size={16} />
-                            </button>
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                              title="Edit"
-                            >
-                              <ClipboardEdit size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(row.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-5 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEdit(row)}
+                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                  title="Edit"
+                                >
+                                  <ClipboardEdit size={16} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(row.id)}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -867,7 +900,8 @@ const SalesMaster = () => {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        )}
       </main>
 
       {viewOpen && (
@@ -892,13 +926,13 @@ const SalesMaster = () => {
                     <th className="px-4 py-3 text-right">Sale Rate</th>
                     <th className="px-4 py-3 text-right">Discount</th>
                     <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3 text-center">Action</th>
+                    {(canEdit || canDelete) && <th className="px-4 py-3 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {viewItems.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-slate-400">
+                      <td colSpan={canEdit || canDelete ? 7 : 6} className="py-10 text-center text-slate-400">
                         No items found for this sale.
                       </td>
                     </tr>
@@ -907,78 +941,100 @@ const SalesMaster = () => {
                       <tr key={it.id ?? `${it.itemid}-${idx}`}>
                         <td className="px-4 py-3 font-semibold text-slate-700">{getItemName(it.itemid)}</td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={it.itemqty}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, itemqty: Number(e.target.value) } : x))
-                              )
-                            }
-                            className="w-20 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
-                          />
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              value={it.itemqty}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, itemqty: Number(e.target.value) } : x))
+                                )
+                              }
+                              className="w-20 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.itemqty}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={it.itemweight}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, itemweight: Number(e.target.value) } : x))
-                              )
-                            }
-                            className="w-24 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
-                          />
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              value={it.itemweight}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, itemweight: Number(e.target.value) } : x))
+                                )
+                              }
+                              className="w-24 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.itemweight}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={it.salerate}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, salerate: Number(e.target.value) } : x))
-                              )
-                            }
-                            className="w-24 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
-                          />
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              value={it.salerate}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, salerate: Number(e.target.value) } : x))
+                                )
+                              }
+                              className="w-24 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.salerate}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={it.discount ?? 0}
-                            onChange={(e) =>
-                              setViewItems((prev) =>
-                                prev.map((x, i) => (i === idx ? { ...x, discount: Number(e.target.value) } : x))
-                              )
-                            }
-                            className="w-20 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
-                          />
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              value={it.discount ?? 0}
+                              onChange={(e) =>
+                                setViewItems((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, discount: Number(e.target.value) } : x))
+                                )
+                              }
+                              className="w-20 px-2 py-1 border border-slate-200 rounded-md text-sm text-right"
+                            />
+                          ) : (
+                            <span className="tabular-nums">{it.discount ?? 0}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right font-bold">
                           ₹{computeTotalSale(it).toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() =>
-                                updateViewItem({
-                                  ...it,
-                                  totalsale: computeTotalSale(it),
-                                })
-                              }
-                              disabled={viewSavingId === it.id}
-                              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400"
-                            >
-                              {viewSavingId === it.id ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              onClick={() => deleteViewItem(it.id)}
-                              className="text-xs font-bold text-red-600 hover:text-red-700"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() =>
+                                    updateViewItem({
+                                      ...it,
+                                      totalsale: computeTotalSale(it),
+                                    })
+                                  }
+                                  disabled={viewSavingId === it.id}
+                                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400"
+                                >
+                                  {viewSavingId === it.id ? "Saving..." : "Save"}
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => deleteViewItem(it.id)}
+                                  className="text-xs font-bold text-red-600 hover:text-red-700"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

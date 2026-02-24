@@ -16,6 +16,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { getCookie } from '../utils/cookieHelper';
+import { getAuthUser, hasPermission, hasRole } from '../utils/auth';
 
 type Customer = {
   id: number | string;
@@ -30,6 +31,14 @@ type Customer = {
 const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 export default function CustomerMaster(): JSX.Element {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, 'admin');
+  const canView = isAdmin || hasPermission(authUser, 'view');
+  const canCreate = isAdmin || hasPermission(authUser, 'create');
+  const canEdit = isAdmin || hasPermission(authUser, 'edit');
+  const canDelete = isAdmin || hasPermission(authUser, 'delete');
+  const canMutate = canCreate || canEdit;
+
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filterType, setFilterType] = useState<'All' | 'Hotel' | 'Shop'>('All');
@@ -48,8 +57,12 @@ export default function CustomerMaster(): JSX.Element {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     fetchCustomers();
-  }, []);
+  }, [canView]);
 
   const fetchCustomers = async () => {
     try {
@@ -91,6 +104,14 @@ export default function CustomerMaster(): JSX.Element {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      showStatus('error', 'You do not have permission to update customers.');
+      return;
+    }
+    if (!editingId && !canCreate) {
+      showStatus('error', 'You do not have permission to create customers.');
+      return;
+    }
     if (formData.phone.replace(/\D/g, '').length !== 10) {
       showStatus('error', 'Phone number must be exactly 10 digits.');
       return;
@@ -150,12 +171,20 @@ export default function CustomerMaster(): JSX.Element {
   };
 
   const handleEdit = (customer: Customer) => {
+    if (!canEdit) {
+      showStatus('error', 'You do not have permission to edit customers.');
+      return;
+    }
     setEditingId(customer.id);
     setFormData({ type: customer.type || 'Hotel', name: customer.name || '', poc: customer.poc || '', phone: customer.phone || '', email: customer.email || '', location: customer.location || '' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id: number | string) => {
+    if (!canDelete) {
+      showStatus('error', 'You do not have permission to delete customers.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this customer?')) return;
     try {
       const res = await fetch(`${API_BASE_URL}/customers/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
@@ -177,6 +206,7 @@ export default function CustomerMaster(): JSX.Element {
     });
   }, [customers, filterType, searchQuery]);
 
+  if (!canView) return <div className="p-8 text-center text-slate-500">You do not have permission to view Customer Master.</div>;
   if (loading) return <div className="p-8 text-center text-slate-500">Loading Customer Master...</div>;
 
   return (
@@ -201,7 +231,8 @@ export default function CustomerMaster(): JSX.Element {
             </div>
           )}
 
-          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8 mb-10 overflow-hidden relative">
+          {canMutate && (
+            <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8 mb-10 overflow-hidden relative">
             <div className="flex items-center gap-3 mb-8">
               <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                 <Plus size={24} />
@@ -278,7 +309,8 @@ export default function CustomerMaster(): JSX.Element {
                 )}
               </div>
             </form>
-          </section>
+            </section>
+          )}
 
           <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-12">
             <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -310,7 +342,9 @@ export default function CustomerMaster(): JSX.Element {
                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">POC Name</th>
                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Contact Info</th>
                     <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Location</th>
-                    <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Actions</th>
+                    {(canEdit || canDelete) && (
+                      <th className="px-8 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -330,17 +364,23 @@ export default function CustomerMaster(): JSX.Element {
                           {c.email && (<div className="text-xs text-slate-400 flex items-center gap-2 font-medium"><Mail size={14} />{c.email}</div>)}
                         </td>
                         <td className="px-8 py-6 text-slate-600"><div className="flex items-center gap-2 font-semibold"><MapPin size={16} className="text-rose-400" />{c.location}</div></td>
-                        <td className="px-8 py-6 text-right">
-                          <div className="flex items-center justify-end gap-3 md:opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
-                            <button onClick={() => handleEdit(c)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all hover:shadow-sm active:scale-90" title="Edit Entry"><Edit2 size={18} /></button>
-                            <button onClick={() => handleDelete(c.id)} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all hover:shadow-sm active:scale-90" title="Delete Entry"><Trash2 size={18} /></button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-8 py-6 text-right">
+                            <div className="flex items-center justify-end gap-3 md:opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                              {canEdit && (
+                                <button onClick={() => handleEdit(c)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all hover:shadow-sm active:scale-90" title="Edit Entry"><Edit2 size={18} /></button>
+                              )}
+                              {canDelete && (
+                                <button onClick={() => handleDelete(c.id)} className="p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all hover:shadow-sm active:scale-90" title="Delete Entry"><Trash2 size={18} /></button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="px-8 py-20 text-center text-slate-400 bg-slate-50/30">
+                      <td colSpan={canEdit || canDelete ? 6 : 5} className="px-8 py-20 text-center text-slate-400 bg-slate-50/30">
                         <div className="flex flex-col items-center gap-4">
                           <div className="p-6 bg-white rounded-full shadow-sm border border-slate-100"><Search size={48} className="text-slate-200" strokeWidth={1} /></div>
                           <div className="space-y-1"><p className="font-bold text-slate-600">No customers found</p><p className="text-sm text-slate-400">Try adjusting your filters or search terms.</p></div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Package, Plus, Search, Edit2, Trash2, CheckCircle2, XCircle } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -11,6 +12,14 @@ type Item = {
 };
 
 const ItemMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canEdit = isAdmin || hasPermission(authUser, "edit");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+  const canMutate = canCreate || canEdit;
+
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,11 +65,23 @@ const ItemMaster = () => {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     loadAll();
-  }, []);
+  }, [canView]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      setError("You do not have permission to update items");
+      return;
+    }
+    if (!editingId && !canCreate) {
+      setError("You do not have permission to create items");
+      return;
+    }
     if (!formData.name) {
       setError("Item name is required");
       return;
@@ -91,6 +112,10 @@ const ItemMaster = () => {
   };
 
   const handleDelete = async (id: string | number) => {
+    if (!canDelete) {
+      setError("You do not have permission to delete items");
+      return;
+    }
     if (!window.confirm("Delete this item?")) return;
     setSaving(true);
     try {
@@ -106,6 +131,10 @@ const ItemMaster = () => {
   };
 
   const startEdit = (item: Item) => {
+    if (!canEdit) {
+      setError("You do not have permission to edit items");
+      return;
+    }
     setEditingId(item.id);
     setFormData({ name: item.name, type: item.type });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -118,6 +147,10 @@ const ItemMaster = () => {
         i.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [items, typeFilter, searchTerm]);
+
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view Item Master.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans text-slate-900">
@@ -141,7 +174,8 @@ const ItemMaster = () => {
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 className="font-semibold text-slate-700 flex items-center gap-2">
               {editingId ? "Edit Item" : "Add New Item"}
@@ -201,7 +235,8 @@ const ItemMaster = () => {
               )}
             </div>
           </form>
-        </div>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -236,13 +271,15 @@ const ItemMaster = () => {
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">Item Name</th>
                     <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">Type</th>
-                    <th className="px-6 py-4 font-bold text-slate-700 text-center">Actions</th>
+                    {(canEdit || canDelete) && (
+                      <th className="px-6 py-4 font-bold text-slate-700 text-center">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
+                      <td colSpan={canEdit || canDelete ? 3 : 2} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
                         <div className="flex flex-col items-center gap-2">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
                           <p>Loading items...</p>
@@ -266,31 +303,37 @@ const ItemMaster = () => {
                             {item.type === "Hotel" ? "Hotel" : "Shop / Company"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => startEdit(item)}
-                              disabled={saving}
-                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Edit"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              disabled={saving}
-                              className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEdit(item)}
+                                  disabled={saving}
+                                  className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Edit"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  disabled={saving}
+                                  className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
+                      <td colSpan={canEdit || canDelete ? 3 : 2} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
                         <div className="flex flex-col items-center gap-2">
                           <Package size={32} className="text-slate-200" />
                           <p>No items found{typeFilter ? ` for type "${typeFilter}"` : ""}.</p>

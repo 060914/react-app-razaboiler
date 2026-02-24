@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE = "http://127.0.0.1:8000/api";
 
@@ -26,6 +27,14 @@ type User = {
 };
 
 const UserMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canEdit = isAdmin || hasPermission(authUser, "edit");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+  const canMutate = canCreate || canEdit;
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,8 +58,12 @@ const UserMaster = () => {
 
   // Fetch users
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     fetchUsers();
-  }, []);
+  }, [canView]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -71,6 +84,14 @@ const UserMaster = () => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    if (editingId && !canEdit) {
+      setError("You do not have permission to update users");
+      return;
+    }
+    if (!editingId && !canCreate) {
+      setError("You do not have permission to create users");
+      return;
+    }
 
     if (!formData.name || !formData.email || !formData.mobileno) {
       setError("Name, Email, and Mobile Number are required");
@@ -127,6 +148,10 @@ const UserMaster = () => {
 
   // Handle Delete
   const handleDelete = async (id: number) => {
+    if (!canDelete) {
+      setError("You do not have permission to delete users");
+      return;
+    }
     if (!window.confirm("Are you sure you want to delete this user?")) return;
 
     setLoading(true);
@@ -148,6 +173,10 @@ const UserMaster = () => {
 
   // Handle Status Toggle
   const handleStatusToggle = async (id: number, currentStatus: string) => {
+    if (!canEdit) {
+      setError("You do not have permission to update users");
+      return;
+    }
     const newStatus = currentStatus === "active" ? "inactive" : "active";
     setLoading(true);
     setError("");
@@ -171,6 +200,10 @@ const UserMaster = () => {
 
   // Start Edit
   const startEdit = (user: User) => {
+    if (!canEdit) {
+      setError("You do not have permission to edit users");
+      return;
+    }
     setFormData({
       name: user.name,
       email: user.email,
@@ -188,6 +221,10 @@ const UserMaster = () => {
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.mobileno.includes(searchTerm)
   );
+
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view User Master.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans text-slate-900">
@@ -221,7 +258,8 @@ const UserMaster = () => {
         )}
 
         {/* Form Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 className="font-semibold text-slate-700 flex items-center gap-2">
               {editingId ? "Edit User Details" : "Add New User"}
@@ -346,7 +384,8 @@ const UserMaster = () => {
               </div>
             </div>
           </form>
-        </div>
+          </div>
+        )}
 
         {/* Users Directory */}
         <div className="space-y-4">
@@ -389,9 +428,11 @@ const UserMaster = () => {
                         <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">
                           Status
                         </th>
-                        <th className="px-6 py-4 font-bold text-slate-700 text-center">
-                          Actions
-                        </th>
+                        {(canEdit || canDelete) && (
+                          <th className="px-6 py-4 font-bold text-slate-700 text-center">
+                            Actions
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -414,41 +455,59 @@ const UserMaster = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 border-r border-slate-100">
-                              <button
-                                onClick={() => handleStatusToggle(user.id, user.status)}
-                                disabled={loading}
-                                className={`text-xs font-semibold px-3 py-1 rounded-full cursor-pointer transition-colors ${
-                                  user.status === "active"
-                                    ? "bg-green-100 text-green-700 hover:bg-yellow-100 hover:text-yellow-700"
-                                    : "bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700"
-                                }`}
-                              >
-                                {user.status}
-                              </button>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {canEdit ? (
                                 <button
-                                  onClick={() => startEdit(user)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
-                                  title="Edit"
+                                  onClick={() => handleStatusToggle(user.id, user.status)}
+                                  disabled={loading}
+                                  className={`text-xs font-semibold px-3 py-1 rounded-full cursor-pointer transition-colors ${
+                                    user.status === "active"
+                                      ? "bg-green-100 text-green-700 hover:bg-yellow-100 hover:text-yellow-700"
+                                      : "bg-red-100 text-red-700 hover:bg-green-100 hover:text-green-700"
+                                  }`}
                                 >
-                                  <Edit2 size={16} />
+                                  {user.status}
                                 </button>
-                                <button
-                                  onClick={() => handleDelete(user.id)}
-                                  className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
-                                  title="Delete"
+                              ) : (
+                                <span
+                                  className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                                    user.status === "active"
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
                                 >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
+                                  {user.status}
+                                </span>
+                              )}
                             </td>
+                            {(canEdit || canDelete) && (
+                              <td className="px-6 py-4">
+                                <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {canEdit && (
+                                    <button
+                                      onClick={() => startEdit(user)}
+                                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                      title="Edit"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                  )}
+                                  {canDelete && (
+                                    <button
+                                      onClick={() => handleDelete(user.id)}
+                                      className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            )}
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
+                          <td colSpan={canEdit || canDelete ? 5 : 4} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
                             <div className="flex flex-col items-center gap-2">
                               <Users size={32} className="text-slate-200" />
                               <p>No users found matching your search.</p>

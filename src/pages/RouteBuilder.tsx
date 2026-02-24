@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Calendar, ClipboardList, Plus, Route, Store, Truck, UserCircle, XCircle } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -35,7 +36,17 @@ type RouteStop = {
   rateofsale: number | string;
 };
 
-const RouteBuilder = () => {
+type Props = {
+  user?: any;
+};
+
+const RouteBuilder = ({ user }: Props) => {
+  const authUser = user || getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<User[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -133,6 +144,10 @@ const RouteBuilder = () => {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       try {
         setLoading(true);
@@ -157,7 +172,7 @@ const RouteBuilder = () => {
       }
     };
     load();
-  }, []);
+  }, [canView]);
 
   useEffect(() => {
     const defaultType = customerTab === "Hotel" ? "fixed" : "variable";
@@ -288,6 +303,10 @@ const RouteBuilder = () => {
 
   const handleCreateRoute = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreate) {
+      setError("You do not have permission to create routes.");
+      return;
+    }
     if (!routeForm.deliverydate) {
       setError("Please select delivery date.");
       return;
@@ -349,6 +368,10 @@ const RouteBuilder = () => {
 
   const handleSaveStop = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreate) {
+      setError("You do not have permission to add stops.");
+      return;
+    }
     if (!activeRouteId) {
       setError("Please create a route header first.");
       return;
@@ -387,6 +410,10 @@ const RouteBuilder = () => {
   };
 
   const handleDeleteStop = async (id: string | number) => {
+    if (!canDelete) {
+      setError("You do not have permission to delete stops.");
+      return;
+    }
     if (!window.confirm("Delete this stop?")) return;
     setSaving(true);
     try {
@@ -454,6 +481,16 @@ const RouteBuilder = () => {
     );
   }, [filteredStops]);
 
+  const stopTableCols = canDelete ? 7 : 6;
+
+  if (!canView) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] text-slate-500">
+        You do not have permission to view Route Builder.
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-slate-500">Loading route builder...</div>
@@ -495,7 +532,9 @@ const RouteBuilder = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          {/* Route Header */}
+          {canCreate && (
+            <>
+              {/* Route Header */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
               <ClipboardList size={14} /> Route Header
@@ -565,7 +604,7 @@ const RouteBuilder = () => {
 
               <button
                 type="submit"
-                disabled={saving}
+                disabled={!canCreate || saving}
                 className="w-full mt-2 bg-slate-900 text-white font-bold py-3 rounded-full shadow-lg transition-all hover:bg-slate-800 disabled:bg-slate-400"
               >
                 {saving ? "Saving..." : "Log Wholesale Trip"}
@@ -577,8 +616,8 @@ const RouteBuilder = () => {
             </div>
           </div>
 
-          {/* Shop Stop Builder */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 p-6 space-y-6">
+              {/* Shop Stop Builder */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 p-6 space-y-6">
             <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400">
               <Plus size={14} /> {customerTab} Stop Builder
             </div>
@@ -661,7 +700,7 @@ const RouteBuilder = () => {
 
               <button
                 type="submit"
-                disabled={saving}
+                disabled={!canCreate || saving}
                 className="md:col-span-2 mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-full shadow-lg transition-all disabled:bg-slate-400"
               >
                 Add Stop To Truck
@@ -693,15 +732,18 @@ const RouteBuilder = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleDeleteStop(stop.id)}
-                            className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                            title="Delete"
-                          >
-                            <XCircle size={16} />
-                          </button>
-                        </div>
+                        {canDelete && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleDeleteStop(stop.id)}
+                              disabled={saving}
+                              className="p-2 rounded-lg hover:bg-red-50 text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Delete"
+                            >
+                              <XCircle size={16} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -719,7 +761,9 @@ const RouteBuilder = () => {
                 </div>
               </div>
             )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Stop Details Table */}
@@ -783,13 +827,13 @@ const RouteBuilder = () => {
                   <th className="px-6 py-4 border-b border-slate-100 text-right">Weight (Kg)</th>
                   <th className="px-6 py-4 border-b border-slate-100 text-right">Rate (₹)</th>
                   <th className="px-6 py-4 border-b border-slate-100 text-right">Total Amount</th>
-                  <th className="px-6 py-4 border-b border-slate-100 text-center">Action</th>
+                  {canDelete && <th className="px-6 py-4 border-b border-slate-100 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredStops.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    <td colSpan={stopTableCols} className="px-6 py-12 text-center text-slate-400">
                       No stops added for the active route.
                     </td>
                   </tr>
@@ -812,17 +856,20 @@ const RouteBuilder = () => {
                         <td className="px-6 py-4 text-right tabular-nums font-bold text-slate-900">
                           ₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleDeleteStop(stop.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                              title="Delete"
-                            >
-                              <XCircle size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {canDelete && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleDeleteStop(stop.id)}
+                                disabled={saving}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete"
+                              >
+                                <XCircle size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -840,7 +887,7 @@ const RouteBuilder = () => {
                     <td className="px-6 py-4 text-right tabular-nums font-black text-emerald-400">
                       ₹{filteredStopsTotal.totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                     </td>
-                    <td></td>
+                    {canDelete && <td></td>}
                   </tr>
                 </tfoot>
               )}

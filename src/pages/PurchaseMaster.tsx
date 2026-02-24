@@ -10,6 +10,7 @@ import {
   ClipboardEdit,
 } from "lucide-react";
 import { getCookie } from "../utils/cookieHelper";
+import { getAuthUser, hasPermission, hasRole } from "../utils/auth";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
@@ -25,6 +26,14 @@ type Purchase = {
 };
 
 const PurchaseMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, "admin");
+  const canView = isAdmin || hasPermission(authUser, "view");
+  const canCreate = isAdmin || hasPermission(authUser, "create");
+  const canEdit = isAdmin || hasPermission(authUser, "edit");
+  const canDelete = isAdmin || hasPermission(authUser, "delete");
+  const canMutate = canCreate || canEdit;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -83,11 +92,23 @@ const PurchaseMaster = () => {
   };
 
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     loadAll();
-  }, []);
+  }, [canView]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      showToast("You do not have permission to update purchases", "error");
+      return;
+    }
+    if (!editingId && !canCreate) {
+      showToast("You do not have permission to create purchases", "error");
+      return;
+    }
     if (!formData.companyid || !formData.purchasedate || !formData.purchaseqty || !formData.rateofpurchase) {
       showToast("Please fill in required fields", "error");
       return;
@@ -146,6 +167,10 @@ const PurchaseMaster = () => {
   };
 
   const handleDelete = async (id: string | number) => {
+    if (!canDelete) {
+      showToast("You do not have permission to delete purchases", "error");
+      return;
+    }
     if (!window.confirm("Delete this purchase entry?")) return;
     setSaving(true);
     try {
@@ -165,6 +190,10 @@ const PurchaseMaster = () => {
   };
 
   const startEdit = (row: Purchase) => {
+    if (!canEdit) {
+      showToast("You do not have permission to edit purchases", "error");
+      return;
+    }
     setEditingId(row.id);
     setFormData({
       companyid: String(row.companyid),
@@ -207,6 +236,10 @@ const PurchaseMaster = () => {
         </div>
       </div>
     );
+  }
+
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view Purchase Master.</div>;
   }
 
   return (
@@ -264,7 +297,8 @@ const PurchaseMaster = () => {
       </header>
 
       <main className="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-600">
               {editingId ? "Update Purchase" : "Create Purchase"}
@@ -380,7 +414,8 @@ const PurchaseMaster = () => {
               </button>
             </div>
           </form>
-        </div>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50">
           <div className="overflow-x-auto">
@@ -392,13 +427,13 @@ const PurchaseMaster = () => {
                   <th className="px-5 py-4 text-right">Weight (Kg)</th>
                   <th className="px-5 py-4 text-right w-40">Rate (₹/Kg)</th>
                   <th className="px-5 py-4 text-right">Total Amount</th>
-                  <th className="px-5 py-4 text-center">Action</th>
+                  {(canEdit || canDelete) && <th className="px-5 py-4 text-center">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-24 text-center text-slate-400">
+                    <td colSpan={canEdit || canDelete ? 6 : 5} className="py-24 text-center text-slate-400">
                       No purchase entries logged for {selectedDate}.
                     </td>
                   </tr>
@@ -418,24 +453,30 @@ const PurchaseMaster = () => {
                         <td className="px-5 py-3 text-right tabular-nums font-black text-slate-900 text-base">
                           ₹{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                              title="Edit"
-                            >
-                              <ClipboardEdit size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(row.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-5 py-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEdit(row)}
+                                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                  title="Edit"
+                                >
+                                  <ClipboardEdit size={16} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(row.id)}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -444,7 +485,7 @@ const PurchaseMaster = () => {
               {filtered.length > 0 && (
                 <tfoot className="bg-slate-900 text-white shadow-2xl">
                   <tr>
-                    <td colSpan={3} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
+                    <td colSpan={canEdit || canDelete ? 3 : 2} className="px-5 py-4 font-black uppercase tracking-widest text-[10px] text-slate-400">
                       Total for {selectedDate}
                     </td>
                     <td className="px-5 py-4 text-right tabular-nums font-bold">
@@ -453,7 +494,7 @@ const PurchaseMaster = () => {
                     <td className="px-5 py-4 text-right tabular-nums text-xl font-black text-blue-400">
                       ₹{dayTotals.totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                     </td>
-                    <td></td>
+                    {(canEdit || canDelete) && <td></td>}
                   </tr>
                 </tfoot>
               )}

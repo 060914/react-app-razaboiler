@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { getCookie } from '../utils/cookieHelper';
+import { getAuthUser, hasPermission, hasRole } from '../utils/auth';
 
 type Vehicle = {
   id: string | number;
@@ -33,6 +34,14 @@ type VehicleType = {
 };
 
 const VehicleMaster = () => {
+  const authUser = getAuthUser();
+  const isAdmin = hasRole(authUser, 'admin');
+  const canView = isAdmin || hasPermission(authUser, 'view');
+  const canCreate = isAdmin || hasPermission(authUser, 'create');
+  const canEdit = isAdmin || hasPermission(authUser, 'edit');
+  const canDelete = isAdmin || hasPermission(authUser, 'delete');
+  const canMutate = canCreate || canEdit;
+
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,9 +90,13 @@ const VehicleMaster = () => {
 
   // Fetch vehicles and types on component mount
   useEffect(() => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
     fetchVehicleTypes();
     fetchVehicles();
-  }, []);
+  }, [canView]);
 
   const fetchVehicleTypes = async () => {
     try {
@@ -175,6 +188,14 @@ const fetchVehicles = async () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && !canEdit) {
+      setError('You do not have permission to update vehicles.');
+      return;
+    }
+    if (!editingId && !canCreate) {
+      setError('You do not have permission to create vehicles.');
+      return;
+    }
     if (!formData.vehicleId || !formData.vehicleNumber || !formData.model) {
       setError('Please provide ID, Number and Model');
       return;
@@ -245,6 +266,10 @@ const fetchVehicles = async () => {
   };
 
   const handleDelete = async (id: string | number) => {
+    if (!canDelete) {
+      setError('You do not have permission to delete vehicles.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this vehicle?')) return;
 
     setSaveLoading(true);
@@ -270,6 +295,10 @@ const fetchVehicles = async () => {
   };
 
   const startEdit = (vehicle: Vehicle) => {
+    if (!canEdit) {
+      setError('You do not have permission to edit vehicles.');
+      return;
+    }
     setFormData({
       vehicleId: vehicle.vehicleId,
       vehicleNumber: vehicle.vehicleNumber,
@@ -291,6 +320,10 @@ const fetchVehicles = async () => {
       (typeFilter === '' || v.type === typeFilter) &&
       (`${v.vehicleId} ${v.vehicleNumber} ${v.model}`.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  if (!canView) {
+    return <div className="p-8 text-center text-slate-500">You do not have permission to view Vehicle Master.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans text-slate-900">
@@ -319,7 +352,8 @@ const fetchVehicles = async () => {
         )}
 
         {/* SECTION A: Add Vehicle Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        {canMutate && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
             <h2 className="font-semibold text-slate-700 flex items-center gap-2">
               {editingId ? 'Edit Vehicle Details' : 'Add New Vehicle'}
@@ -482,7 +516,8 @@ const fetchVehicles = async () => {
               </div>
             </div>
           </form>
-        </div>
+          </div>
+        )}
 
         {/* SECTION B: Fleet Directory */}
         <div className="space-y-4">
@@ -524,13 +559,15 @@ const fetchVehicles = async () => {
                     <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">Vehicle No</th>
                     <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">Model</th>
                     <th className="px-6 py-4 font-bold text-slate-700 border-r border-slate-200">Type</th>
-                    <th className="px-6 py-4 font-bold text-slate-700 text-center">Actions</th>
+                    {(canEdit || canDelete) && (
+                      <th className="px-6 py-4 font-bold text-slate-700 text-center">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
+                      <td colSpan={canEdit || canDelete ? 5 : 4} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
                         <div className="flex flex-col items-center gap-2">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
                           <p>Loading vehicles...</p>
@@ -558,31 +595,37 @@ const fetchVehicles = async () => {
                             {vehicle.type}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => startEdit(vehicle)}
-                              disabled={saveLoading}
-                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Edit"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(vehicle.id)}
-                              disabled={saveLoading}
-                              className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Delete"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
+                        {(canEdit || canDelete) && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {canEdit && (
+                                <button
+                                  onClick={() => startEdit(vehicle)}
+                                  disabled={saveLoading}
+                                  className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Edit"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(vehicle.id)}
+                                  disabled={saveLoading}
+                                  className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
+                      <td colSpan={canEdit || canDelete ? 5 : 4} className="px-6 py-12 text-center text-slate-400 bg-slate-50/50">
                         <div className="flex flex-col items-center gap-2">
                           <Truck size={32} className="text-slate-200" />
                           <p>No vehicles found{typeFilter ? ` for type "${typeFilter}"` : ''}.</p>

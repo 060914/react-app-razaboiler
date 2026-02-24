@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Lock, Mail, ChevronRight, ShieldCheck } from "lucide-react";
 import { setCookie } from "../utils/cookieHelper";
+import { normalizeAuthUser, setAuthUser } from "../utils/auth";
 
 /**
  * Raza Boiler Login Screen
@@ -41,7 +42,9 @@ const LoginScreen = ({ onLogin }) => {
         setCookie("auth_token", token, 7); // Save token in cookie for 7 days
       }
 
-      onLogin(data.user || data);
+      const authUser = normalizeAuthUser(data) || (data.user || data);
+      setAuthUser(authUser);
+      onLogin(authUser);
     } catch (err) {
       setError(err.message || "Invalid credentials. Try again.");
     }

@@ -12,11 +12,14 @@ import VehicleMaster from "./src/pages/VehicleMaster";
 import MaintenanceMaster from "./src/pages/MaintenanceMaster";
 import RouteBuilder from "./src/pages/RouteBuilder";
 import { getCookie, removeCookie } from "./src/utils/cookieHelper";
+import { clearAuthUser, getAuthUser } from "./src/utils/auth";
 
 function App() {
-  const [user, setUser] = useState<any>(
-    getCookie("auth_token") ? {} : null
-  );
+  const [user, setUser] = useState<any>(() => {
+    const stored = getAuthUser();
+    if (stored) return stored;
+    return getCookie("auth_token") ? {} : null;
+  });
 
   const handleLogin = (userData: any) => {
     setUser(userData);
@@ -24,6 +27,7 @@ function App() {
 
   const handleLogout = () => {
     removeCookie("auth_token");
+    clearAuthUser();
     setUser(null);
   };
 
@@ -53,7 +57,7 @@ function App() {
       {route === "orders" && <OrderMaster />}
       {route === "vehicles" && <VehicleMaster />}
       {route === "maintenance" && <MaintenanceMaster />}
-      {route === "route-builder" && <RouteBuilder />}
+      {route === "route-builder" && <RouteBuilder user={user} />}
     </MainLayout>
   );
 }
